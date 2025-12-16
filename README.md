@@ -66,7 +66,7 @@ The tool logs the handshake and transaction submission:
 ℹ️ Connecting to core-testnet1.stellar.org:11625
 ✅ Connected
 ℹ️ Performing handshake
-➡️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-txsub/0.1.0
+➡️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-txsub 0.1.0
 ⬅️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-core 25.0.0
 ➡️ AUTH: flags=200
 ⬅️ AUTH: flags=200
