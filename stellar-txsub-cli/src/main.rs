@@ -36,9 +36,6 @@ struct Args {
     timeout: u64,
 }
 
-/// Local listening port to advertise (not actually listening).
-const LOCAL_LISTENING_PORT: i32 = 11625;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -82,7 +79,7 @@ async fn main() -> Result<()> {
     // Perform handshake
     eprintln!("ℹ️ Performing handshake");
     let net_id = network.id();
-    let mut session = handshake(stream, net_id.clone(), LOCAL_LISTENING_PORT, log_event).await?;
+    let mut session = handshake(stream, net_id.clone(), log_event).await?;
     eprintln!("✅ Authenticated");
 
     // Send transaction

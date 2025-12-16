@@ -32,7 +32,7 @@
 //!     ));
 //!
 //!     // Perform authenticated handshake
-//!     let mut session = handshake(stream, network_id, 11625, |log| {
+//!     let mut session = handshake(stream, network_id, |log| {
 //!         match log {
 //!             Log::Sending(msg) => println!("-> {}", msg),
 //!             Log::Received(msg) => println!("<- {}", msg),

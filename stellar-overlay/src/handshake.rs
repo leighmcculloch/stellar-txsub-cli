@@ -5,6 +5,7 @@ use crate::crypto::{
     generate_nonce, EcdhKeypair, NodeIdentity,
 };
 use crate::session::{recv_unauthenticated, send_unauthenticated, PeerSession};
+use rand::Rng;
 use stellar_xdr::curr::{Auth, ErrorCode, Hash, Hello, NodeId, StellarMessage};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
@@ -91,7 +92,7 @@ pub enum Error {
 ///     0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472
 /// ));
 ///
-/// let session = handshake(stream, network_id, 11625, |log| {
+/// let session = handshake(stream, network_id, |log| {
 ///     match log {
 ///         Log::Sending(msg) => println!("-> {}", msg),
 ///         Log::Received(msg) => println!("<- {}", msg),
@@ -125,7 +126,6 @@ pub enum Log {
 ///
 /// * `stream` - A TCP connection to a Stellar Core node
 /// * `network_id` - The network ID (SHA-256 hash of the network passphrase)
-/// * `listening_port` - The port to advertise in the HELLO message (typically 11625)
 /// * `log` - Callback invoked with log entries during the handshake
 ///
 /// # Errors
@@ -150,7 +150,7 @@ pub enum Log {
 ///         0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472
 ///     ));
 ///
-///     let session = handshake(stream, network_id, 11625, |log| {
+///     let session = handshake(stream, network_id, |log| {
 ///         println!("{:?}", log);
 ///     }).await?;
 ///
@@ -160,13 +160,15 @@ pub enum Log {
 pub async fn handshake(
     mut stream: TcpStream,
     network_id: Hash,
-    listening_port: i32,
     mut log: impl FnMut(Log),
 ) -> Result<PeerSession, Error> {
     // Generate crypto material
     let node_identity = NodeIdentity::generate();
     let ecdh_keypair = EcdhKeypair::generate();
     let local_nonce = generate_nonce();
+
+    // Generate a random port to advertise (we're not actually listening)
+    let listening_port: i32 = rand::thread_rng().gen_range(1024..=65535);
 
     // Calculate expiration time
     let now = SystemTime::now()
