@@ -13,4 +13,4 @@ install:
 	cargo install --locked --force --path stellar-txsub-cli
 
 doc:
-	cargo doc --open
+	cargo doc --no-deps --open
