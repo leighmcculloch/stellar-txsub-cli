@@ -26,7 +26,7 @@ pub enum Error {
 
 /// An authenticated session with a Stellar Core peer.
 ///
-/// After a successful [`handshake`](crate::handshake), you receive a `PeerSession`
+/// After a successful [`connect`], you receive a `PeerSession`
 /// that can be used to send and receive protocol messages.
 ///
 /// # Example

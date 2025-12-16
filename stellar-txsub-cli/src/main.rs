@@ -10,7 +10,7 @@ use clap::Parser;
 use network::Network;
 use std::io::{self, IsTerminal, Read};
 use std::time::Duration;
-use stellar_overlay::handshake;
+use stellar_overlay::connect;
 use stellar_xdr::curr::{ReadXdr, StellarMessage, TransactionEnvelope};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
     // Perform handshake
     eprintln!("ℹ️ Performing handshake");
     let net_id = network.id();
-    let mut session = handshake(stream, net_id.clone()).await?;
+    let mut session = connect(stream, net_id.clone()).await?;
     eprintln!("✅ Authenticated");
 
     // Send transaction

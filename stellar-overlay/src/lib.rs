@@ -16,7 +16,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use stellar_overlay::handshake;
+//! use stellar_overlay::connect;
 //! use stellar_xdr::curr::{Hash, StellarMessage, TransactionEnvelope};
 //! use tokio::net::TcpStream;
 //!
@@ -32,7 +32,7 @@
 //!     ));
 //!
 //!     // Perform authenticated handshake
-//!     let mut session = handshake(stream, network_id).await?;
+//!     let mut session = connect(stream, network_id).await?;
 //!
 //!     // Send a transaction (assuming you have a TransactionEnvelope)
 //!     # let tx_xdr = "AAAAAgAAAADg3G3hclysZlFitS+s5zWyiiJD5B0STWy5LXCj6i5yxQAABdwAHqGTAAAAzgAAAAEAAAAAAAAAAAAAAABne15zAAAAAAAAAAEAAAAAAAAAGAAAAAAAAAABzALUUAAAAEBJmWgZ8/HGWgdJsX3Bf/AM7L+K/Dyy6BVf9AMIlUG+1KF/alr/sEtKUufdJMmJqT/stLnQHf3BGCwLOC8KhYgDAAAABgAAAALMAtRQAAAAFAAAAAEAAAAAAC1dBwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY=";
@@ -64,5 +64,5 @@ mod framing;
 mod handshake;
 mod session;
 
-pub use handshake::{handshake, Error};
+pub use handshake::{connect, Error};
 pub use session::PeerSession;

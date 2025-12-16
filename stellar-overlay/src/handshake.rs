@@ -75,7 +75,7 @@ pub enum Error {
     SystemTime,
 }
 
-/// Perform an authenticated handshake with a Stellar Core peer.
+/// Connect to a Stellar Core peer and perform an authenticated handshake.
 ///
 /// This function performs the Stellar overlay protocol handshake:
 /// 1. Exchange HELLO messages to negotiate protocol versions
@@ -103,7 +103,7 @@ pub enum Error {
 /// # Example
 ///
 /// ```no_run
-/// use stellar_overlay::{handshake, PeerSession};
+/// use stellar_overlay::{connect, PeerSession};
 /// use stellar_xdr::curr::Hash;
 /// use tokio::net::TcpStream;
 ///
@@ -114,12 +114,12 @@ pub enum Error {
 ///         0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472
 ///     ));
 ///
-///     let session = handshake(stream, network_id).await?;
+///     let session = connect(stream, network_id).await?;
 ///
 ///     Ok(session)
 /// }
 /// ```
-pub async fn handshake(
+pub async fn connect(
     mut stream: TcpStream,
     network_id: Hash,
 ) -> Result<PeerSession, Error> {
