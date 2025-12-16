@@ -13,11 +13,11 @@
 //! - Perform authenticated handshakes
 //! - Send and receive protocol messages (transactions, SCP messages, etc.)
 //!
-//! # Quick Start
+//! # Example
 //!
 //! ```no_run
-//! use stellar_overlay::{handshake, network_id, Log, PeerSession};
-//! use stellar_xdr::curr::StellarMessage;
+//! use stellar_overlay::{handshake, network_id, Log};
+//! use stellar_xdr::curr::{StellarMessage, TransactionEnvelope};
 //! use tokio::net::TcpStream;
 //!
 //! #[tokio::main]
@@ -37,28 +37,14 @@
 //!         }
 //!     }).await?;
 //!
+//!     // Send a transaction
+//!     // let tx: TransactionEnvelope = ...;
+//!     // session.send_message(StellarMessage::Transaction(tx)).await?;
+//!
 //!     // Receive messages from the peer
 //!     let msg = session.recv().await?;
 //!     println!("Received: {:?}", msg);
 //!
-//!     Ok(())
-//! }
-//! ```
-//!
-//! # Sending Transactions
-//!
-//! After establishing a session, you can submit transactions to the network:
-//!
-//! ```no_run
-//! use stellar_overlay::PeerSession;
-//! use stellar_xdr::curr::{StellarMessage, TransactionEnvelope};
-//!
-//! async fn send_transaction(
-//!     session: &mut PeerSession,
-//!     tx: TransactionEnvelope,
-//! ) -> Result<(), stellar_overlay::Error> {
-//!     let msg = StellarMessage::Transaction(tx);
-//!     session.send_message(msg).await?;
 //!     Ok(())
 //! }
 //! ```
@@ -71,7 +57,9 @@
 //! - **Mainnet**: `"Public Global Stellar Network ; September 2015"`
 //! - **Local/Standalone**: `"Standalone Network ; February 2017"`
 //!
-//! # Default Peers
+//! # Known Peers
+//!
+//! Some known peers useful for testing:
 //!
 //! - **Testnet**: `core-testnet1.stellar.org:11625`
 //! - **Mainnet**: `core-live-a.stellar.org:11625`
