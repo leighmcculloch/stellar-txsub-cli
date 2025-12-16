@@ -109,7 +109,7 @@ async fn main() -> Result<()> {
 
 /// Log an outgoing message.
 fn log_outgoing(msg: &StellarMessage) {
-    eprintln!("→ {}", format_message(msg));
+    eprintln!("➡️  {}", format_message(msg));
 }
 
 /// Log an incoming message.
@@ -117,7 +117,7 @@ fn log_incoming(msg: &StellarMessage) {
     let prefix = if matches!(msg, StellarMessage::ErrorMsg(_)) {
         "❌"
     } else {
-        "←"
+        "⬅️ "
     };
     eprintln!("{} {}", prefix, format_message(msg));
 }
