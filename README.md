@@ -62,13 +62,20 @@ Reads a base64-encoded transaction envelope from stdin and submits it to the net
 
 ### Network Short Names
 
-| Network | Shorthands | Default Peer |
-|---------|------------|--------------|
-| Testnet | `testnet` | `core-testnet1.stellar.org:11625` |
-| Mainnet | `mainnet` | `core-live-a.stellar.org:11625` |
-| Local | `local` | `localhost:11625` |
+| Network | Short Name |
+|---------|------------|
+| Testnet | `testnet` |
+| Mainnet | `mainnet` |
+| Local | `local` |
 
-Or provide a custom network passphrase directly (defaults to `localhost:11625`).
+
+### Default Peers
+
+| Network | Default Peer |
+|---------|--------------|
+| Testnet | `core-testnet1.stellar.org:11625` |
+| Mainnet | `core-live-a.stellar.org:11625` |
+| Local / Custom | `localhost:11625` |
 
 ## Examples
 
