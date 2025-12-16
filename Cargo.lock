@@ -702,6 +702,7 @@ dependencies = [
  "base64",
  "clap",
  "ed25519-dalek",
+ "hex",
  "hkdf",
  "hmac",
  "rand",

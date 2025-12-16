@@ -92,12 +92,13 @@ async fn main() -> Result<()> {
 
     // Perform handshake
     eprintln!("ℹ️ Performing handshake");
-    let mut session = handshake(stream, net_id, LOCAL_LISTENING_PORT).await?;
+    let mut session = handshake(stream, net_id.clone(), LOCAL_LISTENING_PORT).await?;
     eprintln!("✅ Authenticated");
 
     // Send transaction
+    let tx_hash = tx_envelope.hash(net_id.0).expect("Failed to hash transaction");
+    eprintln!("➡️ TRANSACTION: hash={}", hex::encode(tx_hash));
     let tx_msg = StellarMessage::Transaction(tx_envelope);
-    log_outgoing(&tx_msg);
     session.send_message(tx_msg).await?;
 
     // Wait for responses with timeout
@@ -123,11 +124,6 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Log an outgoing message.
-fn log_outgoing(msg: &StellarMessage) {
-    eprintln!("➡️ {}", format_message(msg));
 }
 
 /// Log an incoming message.
