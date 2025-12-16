@@ -1,21 +1,22 @@
 //! stellar-peerinfo - Get peer information from the Stellar overlay network.
 //!
-//! This CLI tool connects to a Stellar Core node, discovers peers,
-//! and collects peer information from each discovered peer.
+//! This CLI tool connects to Stellar Core nodes, discovers peers recursively,
+//! and outputs peer information.
 
 mod network;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use network::Network;
 use serde::Serialize;
+use std::collections::{HashSet, VecDeque};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use stellar_overlay::connect;
 use stellar_xdr::curr::{NodeId, PeerAddress, PeerAddressIp, PublicKey, StellarMessage};
 use tokio::net::TcpStream;
-use tokio::sync::Semaphore;
+use tokio::sync::{mpsc, Mutex, Semaphore};
 use tokio::time::timeout;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::prelude::*;
@@ -42,10 +43,14 @@ struct Args {
     /// Maximum number of concurrent peer connections
     #[arg(short = 'j', long, default_value = "10")]
     concurrency: usize,
+
+    /// Recursion depth for peer discovery (0 = unlimited, 1 = just initial peer's list)
+    #[arg(short, long, default_value = "1")]
+    depth: usize,
 }
 
 /// JSON output for peer info.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct PeerOutput {
     #[serde(rename = "type")]
     output_type: String,
@@ -61,6 +66,22 @@ struct PeerOutput {
     ledger_version: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+}
+
+/// Result from connecting to a peer.
+struct PeerResult {
+    info: Option<PeerInfo>,
+    known_peers: Vec<String>,
+    error: Option<String>,
+}
+
+/// Successful peer connection info.
+#[derive(Clone)]
+struct PeerInfo {
+    peer_id: String,
+    version: String,
+    overlay_version: u32,
+    ledger_version: u32,
 }
 
 #[tokio::main]
@@ -80,112 +101,198 @@ async fn main() -> Result<()> {
 
     // Resolve network
     let network = Network::from_str(&args.network);
-    let peer = args.peer.as_deref().unwrap_or(network.default_peer());
+    let initial_peer = args.peer.as_deref().unwrap_or(network.default_peer());
 
-    eprintln!("Connecting to {}", peer);
-    let stream = TcpStream::connect(peer)
-        .await
-        .context("Failed to connect to peer")?;
-
-    let net_id = network.id();
-    let mut session = connect(stream, net_id.clone()).await?;
-    eprintln!(
-        "Connected to peer: {}",
-        format_node_id(&session.peer_info().node_id)
-    );
-
-    // Wait for Peers message from peer (sent automatically after handshake)
-    eprintln!("Waiting for peer list...");
-    let response_timeout = Duration::from_secs(args.timeout);
-    let peers = loop {
-        match timeout(response_timeout, session.recv()).await {
-            Ok(Ok(StellarMessage::Peers(peers))) => {
-                eprintln!("Discovered {} peers", peers.len());
-                break peers;
-            }
-            Ok(Ok(msg)) => {
-                // Ignore other messages
-                eprintln!("Received: {}", msg.name());
-            }
-            Ok(Err(e)) => {
-                anyhow::bail!("Connection closed: {}", e);
-            }
-            Err(_) => {
-                anyhow::bail!("Timeout waiting for peers message");
-            }
-        }
-    };
-
-    // Process all peers concurrently with semaphore to limit concurrency
+    let net_id = Arc::new(network.id());
+    let timeout_duration = Duration::from_secs(args.timeout);
     let semaphore = Arc::new(Semaphore::new(args.concurrency));
-    let net_id = Arc::new(net_id);
 
-    let mut handles = Vec::new();
+    // Track visited addresses
+    let visited = Arc::new(Mutex::new(HashSet::<String>::new()));
 
-    for peer_addr in peers.iter() {
-        let addr_str = format_peer_address(peer_addr);
-        let sem = semaphore.clone();
-        let net_id = net_id.clone();
-        let timeout_duration = response_timeout;
+    // Channel for streaming JSON output
+    let (tx, mut rx) = mpsc::unbounded_channel::<PeerOutput>();
 
-        let handle = tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
-
-            eprintln!("Connecting to {}...", addr_str);
-
-            let output = match get_peer_info(&addr_str, &net_id, timeout_duration).await {
-                Ok(output) => output,
-                Err(e) => PeerOutput {
-                    output_type: "error".to_string(),
-                    peer_id: None,
-                    peer_address: Some(addr_str),
-                    version: None,
-                    overlay_version: None,
-                    ledger_version: None,
-                    error: Some(e.to_string()),
-                },
-            };
-
-            // Print immediately as each completes
+    // Spawn output handler
+    let output_handle = tokio::spawn(async move {
+        while let Some(output) = rx.recv().await {
             println!("{}", serde_json::to_string(&output).unwrap());
-        });
+        }
+    });
 
-        handles.push(handle);
+    // BFS queue: (address, depth)
+    let queue = Arc::new(Mutex::new(VecDeque::<(String, usize)>::new()));
+
+    // Add initial peer
+    {
+        let mut q = queue.lock().await;
+        q.push_back((initial_peer.to_string(), 0));
+    }
+    {
+        let mut v = visited.lock().await;
+        v.insert(initial_peer.to_string());
     }
 
-    // Wait for all tasks to complete
-    for handle in handles {
-        let _ = handle.await;
+    let max_depth = args.depth;
+
+    // Process queue
+    loop {
+        // Get batch of addresses
+        let batch: Vec<(String, usize)> = {
+            let mut q = queue.lock().await;
+            let mut batch = Vec::new();
+            while let Some(item) = q.pop_front() {
+                batch.push(item);
+            }
+            batch
+        };
+
+        if batch.is_empty() {
+            break;
+        }
+
+        // Process batch concurrently
+        let mut handles = Vec::new();
+
+        for (addr, depth) in batch {
+            let sem = semaphore.clone();
+            let net_id = net_id.clone();
+            let tx = tx.clone();
+            let queue = queue.clone();
+            let visited = visited.clone();
+
+            let handle = tokio::spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+
+                eprintln!("Connecting to {} (depth {})...", addr, depth);
+
+                let result = get_peer_with_peers(&addr, &net_id, timeout_duration).await;
+
+                // Send JSON output
+                let output = if let Some(ref info) = result.info {
+                    PeerOutput {
+                        output_type: "info".to_string(),
+                        peer_id: Some(info.peer_id.clone()),
+                        peer_address: Some(addr.clone()),
+                        version: Some(info.version.clone()),
+                        overlay_version: Some(info.overlay_version),
+                        ledger_version: Some(info.ledger_version),
+                        error: None,
+                    }
+                } else {
+                    PeerOutput {
+                        output_type: "error".to_string(),
+                        peer_id: None,
+                        peer_address: Some(addr.clone()),
+                        version: None,
+                        overlay_version: None,
+                        ledger_version: None,
+                        error: result.error,
+                    }
+                };
+                let _ = tx.send(output);
+
+                // Add newly discovered peers to queue if within depth limit
+                // depth 0 means unlimited, otherwise stop when depth >= max_depth
+                if max_depth == 0 || depth + 1 < max_depth {
+                    let mut v = visited.lock().await;
+                    let mut q = queue.lock().await;
+                    for peer_addr in result.known_peers {
+                        if !v.contains(&peer_addr) {
+                            v.insert(peer_addr.clone());
+                            q.push_back((peer_addr, depth + 1));
+                        }
+                    }
+                }
+            });
+
+            handles.push(handle);
+        }
+
+        // Wait for batch to complete
+        for handle in handles {
+            let _ = handle.await;
+        }
     }
+
+    // Close the channel
+    drop(tx);
+
+    // Wait for output handler
+    output_handle.await?;
 
     Ok(())
 }
 
-/// Get basic peer info by connecting and performing handshake.
-async fn get_peer_info(
+/// Get peer info and their known peers list.
+async fn get_peer_with_peers(
     addr: &str,
     network_id: &stellar_xdr::curr::Hash,
     timeout_duration: Duration,
-) -> Result<PeerOutput> {
+) -> PeerResult {
     // Connect with timeout
     let stream = match timeout(timeout_duration, TcpStream::connect(addr)).await {
         Ok(Ok(s)) => s,
-        Ok(Err(e)) => return Err(e.into()),
-        Err(_) => anyhow::bail!("Connection timeout"),
+        Ok(Err(e)) => {
+            return PeerResult {
+                info: None,
+                known_peers: vec![],
+                error: Some(e.to_string()),
+            }
+        }
+        Err(_) => {
+            return PeerResult {
+                info: None,
+                known_peers: vec![],
+                error: Some("Connection timeout".to_string()),
+            }
+        }
     };
 
-    let session = connect(stream, network_id.clone()).await?;
-    let info = session.peer_info();
+    let mut session = match connect(stream, network_id.clone()).await {
+        Ok(s) => s,
+        Err(e) => {
+            return PeerResult {
+                info: None,
+                known_peers: vec![],
+                error: Some(e.to_string()),
+            }
+        }
+    };
 
-    Ok(PeerOutput {
-        output_type: "info".to_string(),
-        peer_id: Some(format_node_id(&info.node_id)),
-        peer_address: Some(addr.to_string()),
-        version: Some(info.version_str.clone()),
-        overlay_version: Some(info.overlay_version),
-        ledger_version: Some(info.ledger_version),
+    let peer_info = session.peer_info();
+    let info = PeerInfo {
+        peer_id: format_node_id(&peer_info.node_id),
+        version: peer_info.version_str.clone(),
+        overlay_version: peer_info.overlay_version,
+        ledger_version: peer_info.ledger_version,
+    };
+
+    // Wait for Peers message
+    let known_peers = loop {
+        match timeout(timeout_duration, session.recv()).await {
+            Ok(Ok(StellarMessage::Peers(peers))) => {
+                break peers
+                    .iter()
+                    .map(|p| format_peer_address(p))
+                    .collect::<Vec<_>>();
+            }
+            Ok(Ok(_)) => {
+                // Ignore other messages, keep waiting
+                continue;
+            }
+            Ok(Err(_)) | Err(_) => {
+                // Connection closed or timeout, return what we have
+                break vec![];
+            }
+        }
+    };
+
+    PeerResult {
+        info: Some(info),
+        known_peers,
         error: None,
-    })
+    }
 }
 
 /// Format a NodeId for display.

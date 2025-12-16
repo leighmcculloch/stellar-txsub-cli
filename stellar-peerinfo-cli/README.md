@@ -2,25 +2,21 @@
 
 Get peer information from the Stellar network via the peer-to-peer overlay protocol.
 
-Connects directly to a stellar-core node, discovers peers, and collects information from each peer.
+Connects directly to stellar-core nodes, discovers peers recursively, and outputs peer information.
 
 ## Example
 
 ```
 $ stellar-peerinfo --network testnet
-Connecting to core-testnet1.stellar.org:11625
-Connected to peer: 7d8f...
-Waiting for peer list...
-Discovered 50 peers
-Connecting to 34.123.45.67:11625...
-{"type":"info","peer_id":"a1b2...","peer_address":"34.123.45.67:11625","version":"v21.0.0","overlay_version":35,"ledger_version":21}
-Connecting to 52.67.89.12:11625...
-{"type":"error","peer_address":"52.67.89.12:11625","error":"Connection timeout"}
+Connecting to core-testnet1.stellar.org:11625 (depth 0)...
+{"type":"info","peer_id":"a1b2...","peer_address":"core-testnet1.stellar.org:11625","version":"v21.0.0","overlay_version":35,"ledger_version":21}
+Connecting to 34.123.45.67:11625 (depth 0)...
+{"type":"info","peer_id":"c3d4...","peer_address":"34.123.45.67:11625","version":"v21.0.0","overlay_version":35,"ledger_version":21}
 ```
 
 ## Output Format
 
-The CLI outputs NDJSON (newline-delimited JSON) to stdout, with one JSON object per peer:
+NDJSON (newline-delimited JSON) to stdout, with one JSON object per peer:
 
 ```json
 {"type":"info","peer_id":"...","peer_address":"1.2.3.4:11625","version":"v21.0.0","overlay_version":35,"ledger_version":21}
@@ -57,6 +53,7 @@ Connects to a Stellar Core node, discovers peers, and collects information from 
 | `--peer` | `-p` | (per network) | Initial peer address (host:port) |
 | `--timeout` | `-t` | `10` | Timeout in seconds for responses |
 | `--concurrency` | `-j` | `10` | Maximum concurrent peer connections |
+| `--depth` | `-d` | `1` | Recursion depth (0 = unlimited, 1 = just initial peer's list) |
 
 ### Network Short Names
 
@@ -79,6 +76,11 @@ Connects to a Stellar Core node, discovers peers, and collects information from 
 Get peer info from testnet:
 ```
 stellar-peerinfo --network testnet
+```
+
+Recursively explore all reachable peers (unlimited depth):
+```
+stellar-peerinfo --network testnet --depth 0
 ```
 
 Get peer info from mainnet with high concurrency:
