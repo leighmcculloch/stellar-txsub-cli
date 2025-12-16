@@ -3,22 +3,17 @@
 //! This CLI tool connects to a Stellar Core node and submits transactions
 //! directly via the peer-to-peer overlay protocol.
 
-mod crypto;
-mod framing;
-mod handshake;
 mod network;
-mod session;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
+use network::Network;
 use std::io::{self, IsTerminal, Read};
 use std::time::Duration;
+use stellar_overlay::handshake;
 use stellar_xdr::curr::{ReadXdr, StellarMessage, TransactionEnvelope};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-
-use crate::network::Network;
-use crate::handshake::handshake;
 
 /// Submit transactions to the Stellar overlay network.
 ///

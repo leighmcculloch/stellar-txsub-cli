@@ -31,7 +31,7 @@ const AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED: i32 = 200;
 const AUTH_CERT_EXPIRATION_SECONDS: u64 = 3600;
 
 /// Version string for HELLO message.
-const VERSION_STR: &str = concat!("stellar-txsub ", env!("CARGO_PKG_VERSION"));
+const VERSION_STR: &str = concat!("stellar-overlay ", env!("CARGO_PKG_VERSION"));
 
 /// Perform the peer handshake and return an authenticated session.
 pub async fn handshake(
@@ -100,7 +100,7 @@ pub async fn handshake(
             );
         }
         other => {
-            bail!("Expected HELLO, got {}", other.name());
+            bail!("Expected Hello, got {}", other.name());
         }
     };
 
@@ -176,7 +176,7 @@ pub async fn handshake(
                 }
                 other => {
                     bail!(
-                        "Expected AUTH after SEND_MORE_EXTENDED, got {}",
+                        "Expected Auth after SendMoreExtended, got {}",
                         other.name()
                     );
                 }
@@ -195,7 +195,7 @@ pub async fn handshake(
             );
         }
         other => {
-            bail!("Expected AUTH or SEND_MORE_EXTENDED, got {}", other.name());
+            bail!("Expected Auth or SendMoreExtended, got {}", other.name());
         }
     }
 }

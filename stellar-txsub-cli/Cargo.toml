@@ -1,0 +1,17 @@
+[package]
+name = "stellar-txsub-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "stellar-txsub"
+path = "src/main.rs"
+
+[dependencies]
+stellar-overlay = { path = "../stellar-overlay" }
+stellar-xdr = { version = "25", features = ["std", "curr"] }
+tokio = { version = "1", features = ["full"] }
+base64 = "0.22"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"

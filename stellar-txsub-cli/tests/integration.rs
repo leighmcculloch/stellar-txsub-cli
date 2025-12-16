@@ -1,4 +1,4 @@
-//! Integration test for txsub.
+//! Integration test for stellar-txsub.
 //!
 //! This test connects to the Stellar Testnet and submits a test transaction.
 
@@ -15,7 +15,7 @@ const TEST_TX: &str = "AAAAAgAAAACwA6C/9FZ0ySnhc9z4OxUQhO80f4iykp3l3CPkU+YkhwAAA
 fn test_submit_transaction() {
     // Build the binary first
     let build_status = Command::new("cargo")
-        .args(["build", "--release"])
+        .args(["build", "--release", "-p", "stellar-txsub-cli"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .status()
         .expect("Failed to build");
@@ -24,13 +24,13 @@ fn test_submit_transaction() {
 
     // Run the txsub binary with the test transaction
     let mut child = Command::new("cargo")
-        .args(["run", "--release", "--"])
+        .args(["run", "--release", "-p", "stellar-txsub-cli", "--"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .expect("Failed to spawn txsub");
+        .expect("Failed to spawn stellar-txsub");
 
     // Write the transaction to stdin
     {
@@ -49,7 +49,7 @@ fn test_submit_transaction() {
     // We're testing that the overlay protocol works.
     assert!(
         status.success(),
-        "txsub failed with exit code: {:?}",
+        "stellar-txsub failed with exit code: {:?}",
         status.code()
     );
 }

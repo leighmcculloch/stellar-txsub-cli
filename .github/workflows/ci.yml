@@ -13,7 +13,7 @@ jobs:
       - run: rustup update
       - run: cargo build --release
       - run: cargo test
-      - run: cargo test --test integration
+      - run: cargo test -p stellar-txsub-cli --test integration
 
   cli-test:
     runs-on: ubuntu-latest
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup update
       - uses: stellar/stellar-cli@v23.3.0
-      - run: cargo install --locked --path .
+      - run: cargo install --locked --path stellar-txsub-cli
       - run: stellar network use testnet
       - run: stellar keys generate me
       - run: stellar keys fund me
