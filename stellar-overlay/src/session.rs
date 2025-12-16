@@ -3,10 +3,23 @@
 use crate::crypto::hmac_sha256;
 use crate::framing::{read_message, write_message};
 use stellar_xdr::curr::{
-    AuthenticatedMessage, AuthenticatedMessageV0, HmacSha256Key, HmacSha256Mac, StellarMessage,
-    WriteXdr,
+    AuthenticatedMessage, AuthenticatedMessageV0, HmacSha256Key, HmacSha256Mac, NodeId,
+    StellarMessage, WriteXdr,
 };
 use tokio::net::TcpStream;
+
+/// Information about a connected peer.
+#[derive(Debug, Clone)]
+pub struct PeerInfo {
+    /// The peer's node ID.
+    pub node_id: NodeId,
+    /// The peer's ledger protocol version.
+    pub ledger_version: u32,
+    /// The peer's overlay protocol version.
+    pub overlay_version: u32,
+    /// The peer's version string.
+    pub version_str: String,
+}
 
 /// Errors that can occur during session operations.
 #[derive(Debug, thiserror::Error)]
@@ -52,14 +65,16 @@ pub struct PeerSession {
     recv_mac_key: HmacSha256Key,
     send_sequence: u64,
     recv_sequence: u64,
+    peer_info: PeerInfo,
 }
 
 impl PeerSession {
-    /// Create a new peer session with the given MAC keys.
+    /// Create a new peer session with the given MAC keys and peer info.
     pub(crate) fn new(
         stream: TcpStream,
         send_mac_key: HmacSha256Key,
         recv_mac_key: HmacSha256Key,
+        peer_info: PeerInfo,
     ) -> Self {
         Self {
             stream,
@@ -67,7 +82,13 @@ impl PeerSession {
             recv_mac_key,
             send_sequence: 0,
             recv_sequence: 0,
+            peer_info,
         }
+    }
+
+    /// Get information about the connected peer.
+    pub fn peer_info(&self) -> &PeerInfo {
+        &self.peer_info
     }
 
     /// Wrap a StellarMessage in an AuthenticatedMessage with proper sequence and MAC.

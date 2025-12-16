@@ -11,6 +11,8 @@ use stellar_xdr::curr::{
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519SecretKey};
 
 /// Node identity using Ed25519 keypair.
+///
+/// Used for signing protocol messages.
 pub(crate) struct NodeIdentity {
     pub signing_key: SigningKey,
     pub public_key: VerifyingKey,
@@ -40,6 +42,8 @@ impl NodeIdentity {
 }
 
 /// Curve25519 keypair for ECDH key exchange.
+///
+/// Used for encrypted communication.
 pub(crate) struct EcdhKeypair {
     pub secret: X25519SecretKey,
     pub public: X25519PublicKey,

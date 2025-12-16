@@ -65,4 +65,4 @@ mod handshake;
 mod session;
 
 pub use handshake::{connect, Error};
-pub use session::PeerSession;
+pub use session::{PeerInfo, PeerSession};

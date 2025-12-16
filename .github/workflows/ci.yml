@@ -15,7 +15,7 @@ jobs:
       - run: cargo test
       - run: cargo test -p stellar-txsub-cli --test integration
 
-  cli-test:
+  txsub-cli-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,3 +26,11 @@ jobs:
       - run: stellar keys generate me
       - run: stellar keys fund me
       - run: stellar tx new bump-sequence --source me --bump-to 1 --build-only | stellar tx sign --sign-with-key me | stellar-txsub
+
+  peerinfo-cli-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update
+      - run: cargo install --locked --path stellar-peerinfo-cli
+      - run: stellar-peerinfo --network testnet --timeout 30 2>/dev/null | head -5

@@ -4,7 +4,7 @@ use crate::crypto::{
     create_auth_cert, derive_receiving_mac_key, derive_sending_mac_key, ecdh_shared_secret,
     generate_nonce, EcdhKeypair, NodeIdentity,
 };
-use crate::session::{recv_unauthenticated, send_unauthenticated, PeerSession};
+use crate::session::{recv_unauthenticated, send_unauthenticated, PeerInfo, PeerSession};
 use rand::Rng;
 use stellar_xdr::curr::{Auth, ErrorCode, Hash, Hello, NodeId, StellarMessage};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -83,7 +83,7 @@ pub enum Error {
 /// 3. Exchange AUTH messages to complete authentication
 ///
 /// On success, returns a [`PeerSession`] that can be used to send and receive
-/// protocol messages.
+/// protocol messages. Use [`PeerSession::peer_info`] to get the peer's identity.
 ///
 /// Handshake progress is logged via the `tracing` crate at DEBUG level.
 ///
@@ -115,6 +115,7 @@ pub enum Error {
 ///     ));
 ///
 ///     let session = connect(stream, network_id).await?;
+///     println!("Connected to peer: {:?}", session.peer_info().node_id);
 ///
 ///     Ok(session)
 /// }
@@ -217,6 +218,14 @@ pub async fn connect(
         return Err(Error::NetworkIdMismatch);
     }
 
+    // Extract peer info
+    let peer_info = PeerInfo {
+        node_id: peer_hello.peer_id.clone(),
+        ledger_version: peer_hello.ledger_version,
+        overlay_version: peer_hello.overlay_version,
+        version_str: String::from_utf8_lossy(&peer_hello.version_str.to_vec()).to_string(),
+    };
+
     // Derive shared secret and MAC keys
     let shared_key = ecdh_shared_secret(
         &ecdh_keypair.secret,
@@ -230,8 +239,8 @@ pub async fn connect(
     let recv_mac_key =
         derive_receiving_mac_key(&shared_key, &local_nonce, &peer_hello.nonce, true);
 
-    // Create session with MAC keys
-    let mut session = PeerSession::new(stream, send_mac_key, recv_mac_key);
+    // Create session with MAC keys and peer info
+    let mut session = PeerSession::new(stream, send_mac_key, recv_mac_key, peer_info);
 
     // Send AUTH message
     let auth = Auth {

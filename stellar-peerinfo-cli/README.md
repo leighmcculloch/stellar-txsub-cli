@@ -1,0 +1,102 @@
+# stellar-peerinfo-cli
+
+Get peer information from the Stellar network via the peer-to-peer overlay protocol.
+
+Connects directly to a stellar-core node, discovers peers, and collects information from each peer.
+
+## Example
+
+```
+$ stellar-peerinfo --network testnet
+Connecting to core-testnet1.stellar.org:11625
+Connected to peer: 7d8f...
+Waiting for peer list...
+Discovered 50 peers
+Connecting to 34.123.45.67:11625...
+{"type":"info","peer_id":"a1b2...","peer_address":"34.123.45.67:11625","version":"v21.0.0","overlay_version":35,"ledger_version":21}
+Connecting to 52.67.89.12:11625...
+{"type":"error","peer_address":"52.67.89.12:11625","error":"Connection timeout"}
+```
+
+## Output Format
+
+The CLI outputs NDJSON (newline-delimited JSON) to stdout, with one JSON object per peer:
+
+```json
+{"type":"info","peer_id":"...","peer_address":"1.2.3.4:11625","version":"v21.0.0","overlay_version":35,"ledger_version":21}
+{"type":"error","peer_address":"5.6.7.8:11625","error":"Connection timeout"}
+```
+
+This format allows:
+- Real-time visibility into progress
+- Piping to `jq` or other JSON tools as responses arrive
+- No memory accumulation for large peer lists
+
+## Install
+
+```
+cargo install --locked \
+  --git https://github.com/leighmcculloch/stellar-txsub-cli \
+  --package stellar-peerinfo-cli \
+  --branch main
+```
+
+## Usage
+
+```
+stellar-peerinfo [OPTIONS]
+```
+
+Connects to a Stellar Core node, discovers peers, and collects information from each peer.
+
+### Options
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--network` | `-n` | `testnet` | Network passphrase or short name |
+| `--peer` | `-p` | (per network) | Initial peer address (host:port) |
+| `--timeout` | `-t` | `10` | Timeout in seconds for responses |
+| `--concurrency` | `-j` | `10` | Maximum concurrent peer connections |
+
+### Network Short Names
+
+| Network | Short Name |
+|---------|------------|
+| Testnet | `testnet` |
+| Mainnet | `mainnet` |
+| Local | `local` |
+
+### Default Peers
+
+| Network | Default Peer |
+|---------|--------------|
+| Testnet | `core-testnet1.stellar.org:11625` |
+| Mainnet | `core-live-a.stellar.org:11625` |
+| Local / Custom | `localhost:11625` |
+
+## Examples
+
+Get peer info from testnet:
+```
+stellar-peerinfo --network testnet
+```
+
+Get peer info from mainnet with high concurrency:
+```
+stellar-peerinfo --network mainnet -j 50
+```
+
+Use a custom initial peer:
+```
+stellar-peerinfo --peer my-core-node.example.com:11625 --network mainnet
+```
+
+Use a longer timeout for slow peers:
+```
+stellar-peerinfo --timeout 30
+```
+
+Filter results with jq:
+```
+stellar-peerinfo 2>/dev/null | jq 'select(.type == "info")'
+```

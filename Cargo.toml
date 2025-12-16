@@ -1,3 +1,3 @@
 [workspace]
-members = ["stellar-overlay", "stellar-txsub-cli"]
+members = ["stellar-overlay", "stellar-txsub-cli", "stellar-peerinfo-cli"]
 resolver = "2"

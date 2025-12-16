@@ -1,4 +1,4 @@
-.PHONY: build test test-integration install doc readme
+.PHONY: build test test-integration install install-txsub install-peerinfo doc readme
 
 build:
 	cargo build
@@ -11,6 +11,7 @@ test-integration:
 
 install:
 	cargo install --locked --force --path stellar-txsub-cli
+	cargo install --locked --force --path stellar-peerinfo-cli
 
 doc:
 	cargo doc --no-deps --open
