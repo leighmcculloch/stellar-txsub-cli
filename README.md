@@ -33,7 +33,6 @@ $ stellar tx new bump-sequence --source me --bump-to 1 --build-only \
 ℹ️ Done (timeout)
 ⚠️ This tool does not confirm if the transaction was successful.
 ⚠️ Use the hash to check the status with a block explorer.
-⚠️ took 12s102ms
 ```
 
 ## Install
