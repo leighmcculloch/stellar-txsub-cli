@@ -2,12 +2,46 @@
 
 Submit transactions to the Stellar network via the peer-to-peer overlay protocol.
 
-Connects directly to a Stellar Core node and submits transactions without using Horizon or RPC.
+Connects directly to a stellar-core node and submits transactions without using Horizon or RPC.
+
+> [!WARNING]
+> This tool submits transactions to the overlay network but **does not confirm whether the transaction was included in a ledger or executed successfully**. Use the transaction hash with a Stellar block explorer to verify the final status.
+
+## Example
+
+```
+$ stellar network use testnet
+$ stellar keys generate me
+$ stellar keys fund me
+$ stellar tx new bump-sequence --source me --bump-to 1 --build-only \
+  | stellar tx sign --sign-with-key me \
+  | stellar-txsub --network testnet
+ℹ️ Signing transaction: 29eea3e42d4f649eecec0e9f5c654951263bcd17d73f2a8edcd25936bc90dc46
+ℹ️ Connecting to core-testnet1.stellar.org:11625
+✅ Connected
+ℹ️ Performing handshake
+➡️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-txsub 0.1.0
+⬅️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-core 25.0.0 (e9748b05a70d613437a52c8388dc0d8e68149394)
+➡️ AUTH: flags=200
+⬅️ AUTH: flags=200
+✅ Authenticated
+➡️ TRANSACTION: hash=29eea3e42d4f649eecec0e9f5c654951263bcd17d73f2a8edcd25936bc90dc46
+⬅️ Peers: count=50
+⬅️ SendMoreExtended: num_messages=200, num_bytes=300000
+⬅️ GetScpState
+⬅️ GetScpQuorumset
+ℹ️ Done (timeout)
+⚠️ This tool does not confirm if the transaction was successful.
+⚠️ Use the hash to check the status with a block explorer.
+⚠️ took 12s102ms
+```
 
 ## Install
 
 ```
-cargo install --locked --git https://github.com/leighmcculloch/stellar-txsub-cli --branch main
+cargo install --locked \
+  --git https://github.com/leighmcculloch/stellar-txsub-cli \
+  --branch main
 ```
 
 ## Usage
@@ -22,11 +56,11 @@ Reads a base64-encoded transaction envelope from stdin and submits it to the net
 
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
+| `--network` | `-n` | `testnet` | Network passphrase or short name |
 | `--peer` | `-p` | (per network) | Peer address (host:port) |
-| `--network` | `-n` | `testnet` | Network passphrase or shorthand |
 | `--timeout` | `-t` | `5` | Timeout in seconds for responses |
 
-### Network Shorthands
+### Network Short Names
 
 | Network | Shorthands | Default Peer |
 |---------|------------|--------------|
@@ -57,32 +91,3 @@ Submit with custom timeout:
 ```
 echo "AAAAAgAAAA..." | stellar-txsub --timeout 10
 ```
-
-## Output
-
-The tool logs the handshake and transaction submission:
-
-```
-ℹ️ Connecting to core-testnet1.stellar.org:11625
-✅ Connected
-ℹ️ Performing handshake
-➡️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-txsub 0.1.0
-⬅️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-core 25.0.0
-➡️ AUTH: flags=200
-⬅️ AUTH: flags=200
-✅ Authenticated
-➡️ TRANSACTION: hash=5cf69ec6b9852161c2900907649cd48d9e52c83c92e8ec8b4181c80bf3c22289
-⬅️ PEERS: count=50
-⬅️ SEND_MORE_EXTENDED: num_messages=200, num_bytes=300000
-ℹ️ Done (timeout)
-⚠️ This tool does not confirm if the transaction was successful.
-⚠️ Use the hash to check the status with a block explorer.
-```
-
-Exits with code 1 if an error message is received from the peer.
-
-## Warning
-
-This tool submits transactions to the overlay network but **does not confirm whether the transaction was included in a ledger or executed successfully**. The peer accepting the transaction only means it was forwarded to the network.
-
-Use the transaction hash with a Stellar block explorer to verify the final status.
