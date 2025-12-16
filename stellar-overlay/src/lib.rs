@@ -34,9 +34,11 @@
 //!     // Perform authenticated handshake
 //!     let mut session = handshake(stream, network_id).await?;
 //!
-//!     // Send a transaction
-//!     // let tx: TransactionEnvelope = ...;
-//!     // session.send_message(StellarMessage::Transaction(tx)).await?;
+//!     // Send a transaction (assuming you have a TransactionEnvelope)
+//!     # let tx_xdr = "AAAAAgAAAADg3G3hclysZlFitS+s5zWyiiJD5B0STWy5LXCj6i5yxQAABdwAHqGTAAAAzgAAAAEAAAAAAAAAAAAAAABne15zAAAAAAAAAAEAAAAAAAAAGAAAAAAAAAABzALUUAAAAEBJmWgZ8/HGWgdJsX3Bf/AM7L+K/Dyy6BVf9AMIlUG+1KF/alr/sEtKUufdJMmJqT/stLnQHf3BGCwLOC8KhYgDAAAABgAAAALMAtRQAAAAFAAAAAEAAAAAAC1dBwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY=";
+//!     # let tx_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, tx_xdr).unwrap();
+//!     # let tx: TransactionEnvelope = stellar_xdr::curr::ReadXdr::from_xdr(&tx_bytes, stellar_xdr::curr::Limits::none()).unwrap();
+//!     session.send_message(StellarMessage::Transaction(tx)).await?;
 //!
 //!     // Receive messages from the peer
 //!     let msg = session.recv().await?;
