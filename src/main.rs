@@ -1,4 +1,4 @@
-//! txsub - Submit transactions to the Stellar overlay network.
+//! stellar-txsub - Submit transactions to the Stellar overlay network.
 //!
 //! This CLI tool connects to a Stellar Core node and submits transactions
 //! directly via the peer-to-peer overlay protocol.
@@ -25,7 +25,7 @@ use crate::handshake::handshake;
 /// connects to a Stellar Core node, and submits it via the
 /// peer-to-peer overlay protocol.
 #[derive(Parser, Debug)]
-#[command(name = "txsub", version, about)]
+#[command(name = "stellar-txsub", version, about)]
 struct Args {
     /// Peer address to connect to (host:port)
     #[arg(short, long, default_value = "core-testnet1.stellar.org:11625")]
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
 
     // Check if stdin is a TTY (no input piped)
     if io::stdin().is_terminal() {
-        bail!("No transaction provided. Pipe a base64-encoded transaction to stdin.\n\nExample: echo <BASE64_TX> | txsub");
+        bail!("No transaction provided. Pipe a base64-encoded transaction to stdin.\n\nExample: echo <BASE64_TX> | stellar-txsub");
     }
 
     // Read transaction from stdin

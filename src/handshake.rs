@@ -16,10 +16,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 
 /// Current overlay protocol version.
-const OVERLAY_PROTOCOL_VERSION: u32 = 36;
+const OVERLAY_PROTOCOL_VERSION: u32 = 38;
 
 /// Minimum overlay protocol version we support.
 const OVERLAY_PROTOCOL_MIN_VERSION: u32 = 35;
+
+/// Current ledger protocol version.
+const LEDGER_PROTOCOL_VERSION: u32 = 22;
 
 /// Auth message flag indicating flow control in bytes is requested.
 const AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED: i32 = 200;
@@ -54,7 +57,7 @@ pub async fn handshake(
         overlay_version: OVERLAY_PROTOCOL_VERSION,
         overlay_min_version: OVERLAY_PROTOCOL_MIN_VERSION,
         network_id: network_id.clone(),
-        version_str: "txsub/0.1.0".to_string().try_into().unwrap(),
+        version_str: "stellar-txsub/0.1.0".to_string().try_into().unwrap(),
         listening_port,
         peer_id: NodeId(node_identity.to_public_key()),
         cert: auth_cert,
@@ -64,7 +67,7 @@ pub async fn handshake(
     // Send HELLO
     let hello_msg = StellarMessage::Hello(hello);
     eprintln!(
-        "➡️ HELLO: ledger_version={}, overlay_version={}, version_str=txsub/0.1.0",
+        "➡️ HELLO: ledger_version={}, overlay_version={}, version_str=stellar-txsub/0.1.0",
         22, OVERLAY_PROTOCOL_VERSION
     );
     send_unauthenticated(&mut stream, hello_msg).await?;

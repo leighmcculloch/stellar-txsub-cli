@@ -629,6 +629,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "stellar-txsub"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "ed25519-dalek",
+ "hex",
+ "hkdf",
+ "hmac",
+ "rand",
+ "sha2",
+ "stellar-xdr",
+ "tokio",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "stellar-xdr"
 version = "25.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -692,24 +710,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "txsub"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "clap",
- "ed25519-dalek",
- "hex",
- "hkdf",
- "hmac",
- "rand",
- "sha2",
- "stellar-xdr",
- "tokio",
- "x25519-dalek",
 ]
 
 [[package]]

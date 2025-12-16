@@ -13,7 +13,7 @@ cargo install --locked --git https://github.com/leighmcculloch/stellar-txsub-cli
 ## Usage
 
 ```
-txsub [OPTIONS]
+stellar-txsub [OPTIONS]
 ```
 
 Reads a base64-encoded transaction envelope from stdin and submits it to the network.
@@ -37,17 +37,17 @@ Or provide a custom network passphrase directly.
 
 Submit a transaction to testnet:
 ```
-echo "AAAAAgAAAA..." | txsub
+echo "AAAAAgAAAA..." | stellar-txsub
 ```
 
 Submit to mainnet:
 ```
-echo "AAAAAgAAAA..." | txsub --network mainnet --peer core-live-a.stellar.org:11625
+echo "AAAAAgAAAA..." | stellar-txsub --network mainnet --peer core-live-a.stellar.org:11625
 ```
 
 Submit with custom timeout:
 ```
-echo "AAAAAgAAAA..." | txsub --timeout 10
+echo "AAAAAgAAAA..." | stellar-txsub --timeout 10
 ```
 
 ## Output
@@ -58,7 +58,7 @@ The tool logs the handshake and transaction submission:
 ℹ️ Connecting to core-testnet1.stellar.org:11625
 ✅ Connected
 ℹ️ Performing handshake
-➡️ HELLO: ledger_version=22, overlay_version=36, version_str=txsub/0.1.0
+➡️ HELLO: ledger_version=22, overlay_version=36, version_str=stellar-txsub/0.1.0
 ⬅️ HELLO: ledger_version=25, overlay_version=38, version_str=stellar-core 25.0.0
 ➡️ AUTH: flags=200
 ⬅️ AUTH: flags=200
