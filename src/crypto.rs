@@ -232,6 +232,9 @@ pub fn network_id(passphrase: &str) -> Hash {
 /// Testnet network passphrase.
 pub const TESTNET_PASSPHRASE: &str = "Test SDF Network ; September 2015";
 
+/// Mainnet (public) network passphrase.
+pub const MAINNET_PASSPHRASE: &str = "Public Global Stellar Network ; September 2015";
+
 #[cfg(test)]
 mod tests {
     use super::*;

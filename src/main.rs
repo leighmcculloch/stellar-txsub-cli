@@ -2,44 +2,54 @@
 //!
 //! This CLI tool connects to a Stellar Core node and submits transactions
 //! directly via the peer-to-peer overlay protocol.
-//!
-//! Usage:
-//!   echo "BASE64_ENCODED_TX" | txsub
-//!
-//! The tool reads a base64-encoded transaction envelope from stdin,
-//! connects to the Stellar Testnet, performs the peer handshake,
-//! and sends the transaction.
 
 mod crypto;
 mod framing;
 mod handshake;
 mod session;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use clap::Parser;
 use std::io::{self, IsTerminal, Read};
 use std::time::Duration;
 use stellar_xdr::curr::{ReadXdr, StellarMessage, TransactionEnvelope};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-use crate::crypto::{network_id, TESTNET_PASSPHRASE};
+use crate::crypto::{network_id, MAINNET_PASSPHRASE, TESTNET_PASSPHRASE};
 use crate::handshake::handshake;
 
-/// Default peer to connect to (Stellar Testnet).
-const DEFAULT_PEER: &str = "core-testnet1.stellar.org:11625";
+/// Submit transactions to the Stellar overlay network.
+///
+/// Reads a base64-encoded transaction envelope from stdin,
+/// connects to a Stellar Core node, and submits it via the
+/// peer-to-peer overlay protocol.
+#[derive(Parser, Debug)]
+#[command(name = "txsub", version, about)]
+struct Args {
+    /// Peer address to connect to (host:port)
+    #[arg(short, long, default_value = "core-testnet1.stellar.org:11625")]
+    peer: String,
+
+    /// Network passphrase (or "testnet" / "mainnet")
+    #[arg(short, long, default_value = "testnet")]
+    network: String,
+
+    /// Timeout in seconds for waiting for responses
+    #[arg(short, long, default_value = "5")]
+    timeout: u64,
+}
 
 /// Local listening port to advertise (not actually listening).
 const LOCAL_LISTENING_PORT: i32 = 11625;
 
-/// Timeout for waiting for responses after sending transaction.
-const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
-
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Args::parse();
+
     // Check if stdin is a TTY (no input piped)
     if io::stdin().is_terminal() {
-        print_help();
-        std::process::exit(1);
+        bail!("No transaction provided. Pipe a base64-encoded transaction to stdin.\n\nExample: echo <BASE64_TX> | txsub");
     }
 
     // Read transaction from stdin
@@ -50,8 +60,7 @@ async fn main() -> Result<()> {
 
     let input = input.trim();
     if input.is_empty() {
-        print_help();
-        std::process::exit(1);
+        bail!("No transaction provided on stdin");
     }
 
     // Decode base64
@@ -63,18 +72,26 @@ async fn main() -> Result<()> {
         TransactionEnvelope::from_xdr(&tx_bytes, stellar_xdr::curr::Limits::none())
             .context("Failed to parse transaction envelope")?;
 
+    // Resolve network passphrase
+    let network_lower = args.network.to_lowercase();
+    let passphrase = match network_lower.as_str() {
+        "testnet" | "test" => TESTNET_PASSPHRASE,
+        "mainnet" | "main" | "pubnet" | "public" => MAINNET_PASSPHRASE,
+        _ => &args.network,
+    };
+
     // Connect to peer
-    eprintln!("ℹ️  Connecting to {}", DEFAULT_PEER);
-    let stream = TcpStream::connect(DEFAULT_PEER)
+    eprintln!("ℹ️ Connecting to {}", args.peer);
+    let stream = TcpStream::connect(&args.peer)
         .await
         .context("Failed to connect to peer")?;
     eprintln!("✅ Connected");
 
     // Compute network ID
-    let net_id = network_id(TESTNET_PASSPHRASE);
+    let net_id = network_id(passphrase);
 
     // Perform handshake
-    eprintln!("ℹ️  Performing handshake");
+    eprintln!("ℹ️ Performing handshake");
     let mut session = handshake(stream, net_id, LOCAL_LISTENING_PORT).await?;
     eprintln!("✅ Authenticated");
 
@@ -84,8 +101,9 @@ async fn main() -> Result<()> {
     session.send_message(tx_msg).await?;
 
     // Wait for responses with timeout
+    let response_timeout = Duration::from_secs(args.timeout);
     loop {
-        match timeout(RESPONSE_TIMEOUT, session.recv()).await {
+        match timeout(response_timeout, session.recv()).await {
             Ok(Ok(msg)) => {
                 log_incoming(&msg);
                 // If we got an error, exit with failure
@@ -98,7 +116,7 @@ async fn main() -> Result<()> {
                 break;
             }
             Err(_) => {
-                eprintln!("ℹ️  Done (timeout)");
+                eprintln!("ℹ️ Done (timeout)");
                 break;
             }
         }
@@ -107,20 +125,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Print help/usage information.
-fn print_help() {
-    eprintln!("txsub - Submit transactions to the Stellar overlay network");
-    eprintln!();
-    eprintln!("Usage: echo <BASE64_TX> | txsub");
-    eprintln!();
-    eprintln!("Reads a base64-encoded transaction envelope from stdin,");
-    eprintln!("connects to the Stellar Testnet, and submits it via the");
-    eprintln!("peer-to-peer overlay protocol.");
-}
-
 /// Log an outgoing message.
 fn log_outgoing(msg: &StellarMessage) {
-    eprintln!("➡️  {}", format_message(msg));
+    eprintln!("➡️ {}", format_message(msg));
 }
 
 /// Log an incoming message.
@@ -128,7 +135,7 @@ fn log_incoming(msg: &StellarMessage) {
     let prefix = if matches!(msg, StellarMessage::ErrorMsg(_)) {
         "❌"
     } else {
-        "⬅️ "
+        "⬅️"
     };
     eprintln!("{} {}", prefix, format_message(msg));
 }
