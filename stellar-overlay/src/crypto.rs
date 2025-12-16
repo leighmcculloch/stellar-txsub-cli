@@ -8,7 +8,6 @@
 //! - HKDF key expansion for MAC keys
 //! - HMAC-SHA256 for message authentication
 
-use anyhow::Result;
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use hmac::{Hmac, Mac};
 use rand::rngs::OsRng;
@@ -88,7 +87,7 @@ pub fn create_auth_cert(
     node_identity: &NodeIdentity,
     ecdh_keypair: &EcdhKeypair,
     expiration: u64,
-) -> Result<AuthCert> {
+) -> AuthCert {
     // Build the data to sign: networkID || ENVELOPE_TYPE_AUTH || expiration || pubkey
     let mut data_to_sign = Vec::new();
     data_to_sign.extend_from_slice(&network_id.0);
@@ -100,11 +99,11 @@ pub fn create_auth_cert(
     let hash = sha256(&data_to_sign);
     let sig = node_identity.sign(&hash);
 
-    Ok(AuthCert {
+    AuthCert {
         pubkey: ecdh_keypair.to_curve25519_public(),
         expiration,
         sig,
-    })
+    }
 }
 
 /// Derive the shared secret using Curve25519 ECDH.

@@ -10,8 +10,7 @@ use crate::crypto::{
     generate_nonce, EcdhKeypair, NodeIdentity,
 };
 use crate::session::{recv_unauthenticated, send_unauthenticated, PeerSession};
-use anyhow::{bail, Context, Result};
-use stellar_xdr::curr::{Auth, Hash, Hello, NodeId, StellarMessage};
+use stellar_xdr::curr::{Auth, ErrorCode, Hash, Hello, NodeId, StellarMessage};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 
@@ -33,6 +32,34 @@ const AUTH_CERT_EXPIRATION_SECONDS: u64 = 3600;
 /// Version string for HELLO message.
 const VERSION_STR: &str = concat!("stellar-overlay ", env!("CARGO_PKG_VERSION"));
 
+/// Errors that can occur during the handshake process.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Error during session operations.
+    #[error(transparent)]
+    Session(#[from] crate::session::Error),
+
+    /// Peer sent an error message.
+    #[error("peer sent error: {code:?} - {message}")]
+    PeerError { code: ErrorCode, message: String },
+
+    /// Received unexpected message type.
+    #[error("expected {expected}, got {got}")]
+    UnexpectedMessage { expected: &'static str, got: String },
+
+    /// Peer's overlay protocol version is too old.
+    #[error("peer overlay version {version} is too old (min: {min})")]
+    OverlayVersionTooOld { version: u32, min: u32 },
+
+    /// Network ID does not match expected value.
+    #[error("network ID mismatch")]
+    NetworkIdMismatch,
+
+    /// System time is before UNIX epoch.
+    #[error("system time before UNIX epoch")]
+    SystemTime,
+}
+
 /// Events emitted during the handshake process.
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -52,7 +79,7 @@ pub async fn handshake(
     network_id: Hash,
     listening_port: i32,
     mut log: impl FnMut(Event),
-) -> Result<PeerSession> {
+) -> Result<PeerSession, Error> {
     // Generate crypto material
     let node_identity = NodeIdentity::generate();
     let ecdh_keypair = EcdhKeypair::generate();
@@ -61,12 +88,12 @@ pub async fn handshake(
     // Calculate expiration time
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .context("System time before UNIX epoch")?
+        .map_err(|_| Error::SystemTime)?
         .as_secs();
     let expiration = now + AUTH_CERT_EXPIRATION_SECONDS;
 
     // Create auth certificate
-    let auth_cert = create_auth_cert(&network_id, &node_identity, &ecdh_keypair, expiration)?;
+    let auth_cert = create_auth_cert(&network_id, &node_identity, &ecdh_keypair, expiration);
 
     // Build HELLO message
     let hello = Hello {
@@ -87,10 +114,14 @@ pub async fn handshake(
         "Hello: ledger_version={}, overlay_version={}, version_str={}",
         LEDGER_PROTOCOL_VERSION, OVERLAY_PROTOCOL_VERSION, VERSION_STR
     )));
-    send_unauthenticated(&mut stream, hello_msg).await?;
+    send_unauthenticated(&mut stream, hello_msg)
+        .await
+        .map_err(Error::Session)?;
 
     // Receive HELLO from peer
-    let peer_hello = recv_unauthenticated(&mut stream).await?;
+    let peer_hello = recv_unauthenticated(&mut stream)
+        .await
+        .map_err(Error::Session)?;
     let peer_hello = match peer_hello {
         StellarMessage::Hello(h) => {
             log(Event::Received(format!(
@@ -102,31 +133,32 @@ pub async fn handshake(
             h
         }
         StellarMessage::ErrorMsg(e) => {
-            let msg = format!(
-                "ErrorMsg: {:?} - {}",
-                e.code,
-                String::from_utf8_lossy(&e.msg.to_vec())
-            );
-            log(Event::Error(msg.clone()));
-            bail!("Peer sent {}", msg);
+            let message = String::from_utf8_lossy(&e.msg.to_vec()).to_string();
+            log(Event::Error(format!("ErrorMsg: {:?} - {}", e.code, message)));
+            return Err(Error::PeerError {
+                code: e.code,
+                message,
+            });
         }
         other => {
-            bail!("Expected Hello, got {}", other.name());
+            return Err(Error::UnexpectedMessage {
+                expected: "Hello",
+                got: other.name().to_string(),
+            });
         }
     };
 
     // Verify peer's overlay version
     if peer_hello.overlay_version < OVERLAY_PROTOCOL_MIN_VERSION {
-        bail!(
-            "Peer overlay version {} is too old (min: {})",
-            peer_hello.overlay_version,
-            OVERLAY_PROTOCOL_MIN_VERSION
-        );
+        return Err(Error::OverlayVersionTooOld {
+            version: peer_hello.overlay_version,
+            min: OVERLAY_PROTOCOL_MIN_VERSION,
+        });
     }
 
     // Verify network ID matches
     if peer_hello.network_id != network_id {
-        bail!("Network ID mismatch");
+        return Err(Error::NetworkIdMismatch);
     }
 
     // Derive shared secret and MAC keys
@@ -154,10 +186,10 @@ pub async fn handshake(
         "Auth: flags={}",
         AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED
     )));
-    session.send_message(auth_msg).await?;
+    session.send_message(auth_msg).await.map_err(Error::Session)?;
 
     // Receive response (could be AUTH, SEND_MORE_EXTENDED, or ERROR)
-    let response = session.recv().await?;
+    let response = session.recv().await.map_err(Error::Session)?;
     match response {
         StellarMessage::Auth(a) => {
             log(Event::Received(format!("Auth: flags={}", a.flags)));
@@ -170,40 +202,37 @@ pub async fn handshake(
             )));
             // Peer sent SEND_MORE_EXTENDED before AUTH, which is valid
             // Wait for AUTH
-            let auth_response = session.recv().await?;
+            let auth_response = session.recv().await.map_err(Error::Session)?;
             match auth_response {
                 StellarMessage::Auth(a) => {
                     log(Event::Received(format!("Auth: flags={}", a.flags)));
                     Ok(session)
                 }
                 StellarMessage::ErrorMsg(e) => {
-                    let msg = format!(
-                        "ErrorMsg: {:?} - {}",
-                        e.code,
-                        String::from_utf8_lossy(&e.msg.to_vec())
-                    );
-                    log(Event::Error(msg.clone()));
-                    bail!("Auth failed: {}", msg);
+                    let message = String::from_utf8_lossy(&e.msg.to_vec()).to_string();
+                    log(Event::Error(format!("ErrorMsg: {:?} - {}", e.code, message)));
+                    Err(Error::PeerError {
+                        code: e.code,
+                        message,
+                    })
                 }
-                other => {
-                    bail!(
-                        "Expected Auth after SendMoreExtended, got {}",
-                        other.name()
-                    );
-                }
+                other => Err(Error::UnexpectedMessage {
+                    expected: "Auth",
+                    got: other.name().to_string(),
+                }),
             }
         }
         StellarMessage::ErrorMsg(e) => {
-            let msg = format!(
-                "ErrorMsg: {:?} - {}",
-                e.code,
-                String::from_utf8_lossy(&e.msg.to_vec())
-            );
-            log(Event::Error(msg.clone()));
-            bail!("Auth failed: {}", msg);
+            let message = String::from_utf8_lossy(&e.msg.to_vec()).to_string();
+            log(Event::Error(format!("ErrorMsg: {:?} - {}", e.code, message)));
+            Err(Error::PeerError {
+                code: e.code,
+                message,
+            })
         }
-        other => {
-            bail!("Expected Auth or SendMoreExtended, got {}", other.name());
-        }
+        other => Err(Error::UnexpectedMessage {
+            expected: "Auth or SendMoreExtended",
+            got: other.name().to_string(),
+        }),
     }
 }

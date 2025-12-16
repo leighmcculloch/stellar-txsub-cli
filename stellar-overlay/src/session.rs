@@ -7,12 +7,27 @@
 
 use crate::crypto::hmac_sha256;
 use crate::framing::{read_message, write_message};
-use anyhow::{bail, Result};
 use stellar_xdr::curr::{
     AuthenticatedMessage, AuthenticatedMessageV0, HmacSha256Key, HmacSha256Mac, StellarMessage,
     WriteXdr,
 };
 use tokio::net::TcpStream;
+
+/// Errors that can occur during session operations.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Error during message framing.
+    #[error(transparent)]
+    Framing(#[from] crate::framing::Error),
+
+    /// Received message has unexpected sequence number.
+    #[error("unexpected sequence number: expected {expected}, got {got}")]
+    UnexpectedSequence { expected: u64, got: u64 },
+
+    /// MAC verification failed on received message.
+    #[error("MAC verification failed")]
+    MacVerificationFailed,
+}
 
 /// A session with an authenticated peer.
 pub struct PeerSession {
@@ -64,29 +79,32 @@ impl PeerSession {
     }
 
     /// Send an authenticated message to the peer.
-    async fn send(&mut self, msg: AuthenticatedMessage) -> Result<()> {
-        write_message(&mut self.stream, &msg).await
+    async fn send(&mut self, msg: AuthenticatedMessage) -> Result<(), Error> {
+        write_message(&mut self.stream, &msg)
+            .await
+            .map_err(Error::Framing)
     }
 
     /// Send a StellarMessage (automatically wrapping it in AuthenticatedMessage).
-    pub async fn send_message(&mut self, msg: StellarMessage) -> Result<()> {
+    pub async fn send_message(&mut self, msg: StellarMessage) -> Result<(), Error> {
         let auth_msg = self.wrap_authenticated(msg);
         self.send(auth_msg).await
     }
 
     /// Receive and verify an authenticated message from the peer.
-    pub async fn recv(&mut self) -> Result<StellarMessage> {
-        let auth_msg = read_message(&mut self.stream, true).await?;
+    pub async fn recv(&mut self) -> Result<StellarMessage, Error> {
+        let auth_msg = read_message(&mut self.stream, true)
+            .await
+            .map_err(Error::Framing)?;
 
         match auth_msg {
             AuthenticatedMessage::V0(v0) => {
                 // Verify sequence number
                 if v0.sequence != self.recv_sequence {
-                    bail!(
-                        "Unexpected sequence number: expected {}, got {}",
-                        self.recv_sequence,
-                        v0.sequence
-                    );
+                    return Err(Error::UnexpectedSequence {
+                        expected: self.recv_sequence,
+                        got: v0.sequence,
+                    });
                 }
 
                 // Verify MAC
@@ -104,7 +122,7 @@ impl PeerSession {
                 let expected_mac = hmac_sha256(&self.recv_mac_key, &data_to_mac);
 
                 if v0.mac.mac != expected_mac.mac {
-                    bail!("MAC verification failed");
+                    return Err(Error::MacVerificationFailed);
                 }
 
                 self.recv_sequence += 1;
@@ -118,21 +136,25 @@ impl PeerSession {
 ///
 /// These messages are sent before authentication is complete,
 /// so they use sequence 0 and a zero MAC.
-pub async fn send_unauthenticated(stream: &mut TcpStream, msg: StellarMessage) -> Result<()> {
+pub async fn send_unauthenticated(stream: &mut TcpStream, msg: StellarMessage) -> Result<(), Error> {
     let auth_msg = AuthenticatedMessage::V0(AuthenticatedMessageV0 {
         sequence: 0,
         message: msg,
         mac: HmacSha256Mac { mac: [0u8; 32] },
     });
-    write_message(stream, &auth_msg).await
+    write_message(stream, &auth_msg)
+        .await
+        .map_err(Error::Framing)
 }
 
 /// Receive an unauthenticated message (HELLO).
 ///
 /// These messages are received before authentication is complete,
 /// so we don't verify the MAC.
-pub async fn recv_unauthenticated(stream: &mut TcpStream) -> Result<StellarMessage> {
-    let auth_msg = read_message(stream, false).await?;
+pub async fn recv_unauthenticated(stream: &mut TcpStream) -> Result<StellarMessage, Error> {
+    let auth_msg = read_message(stream, false)
+        .await
+        .map_err(Error::Framing)?;
 
     match auth_msg {
         AuthenticatedMessage::V0(v0) => Ok(v0.message),

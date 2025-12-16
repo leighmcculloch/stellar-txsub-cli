@@ -3,7 +3,6 @@
 //! Messages are framed with a 4-byte big-endian length prefix.
 //! The MSB (continuation bit) is always 0 for complete messages.
 
-use anyhow::{bail, Context, Result};
 use stellar_xdr::curr::{AuthenticatedMessage, ReadXdr, WriteXdr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -14,19 +13,55 @@ const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 /// Maximum unauthenticated message size (limited before auth complete).
 const MAX_UNAUTH_MESSAGE_SIZE: usize = 256 * 1024;
 
+/// Errors that can occur during message framing operations.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Failed to read message header from stream.
+    #[error("failed to read message header")]
+    ReadHeader(std::io::Error),
+
+    /// Failed to read message body from stream.
+    #[error("failed to read message body")]
+    ReadBody(std::io::Error),
+
+    /// Failed to write message header to stream.
+    #[error("failed to write message header")]
+    WriteHeader(std::io::Error),
+
+    /// Failed to write message body to stream.
+    #[error("failed to write message body")]
+    WriteBody(std::io::Error),
+
+    /// Failed to deserialize XDR message.
+    #[error("failed to deserialize XDR message")]
+    XdrDeserialize(stellar_xdr::curr::Error),
+
+    /// Failed to serialize XDR message.
+    #[error("failed to serialize XDR message")]
+    XdrSerialize(stellar_xdr::curr::Error),
+
+    /// Message size is invalid (zero or exceeds maximum).
+    #[error("invalid message size: {size} bytes (max: {max})")]
+    InvalidMessageSize { size: usize, max: usize },
+
+    /// Message is too large to send.
+    #[error("message too large: {size} bytes")]
+    MessageTooLarge { size: usize },
+}
+
 /// Read a framed message from the stream.
 ///
 /// Returns the deserialized AuthenticatedMessage.
 pub async fn read_message(
     stream: &mut TcpStream,
     authenticated: bool,
-) -> Result<AuthenticatedMessage> {
+) -> Result<AuthenticatedMessage, Error> {
     // Read the 4-byte length header
     let mut header = [0u8; 4];
     stream
         .read_exact(&mut header)
         .await
-        .context("Failed to read message header")?;
+        .map_err(Error::ReadHeader)?;
 
     // Parse length (clear continuation bit in MSB)
     let length = u32::from_be_bytes(header) & 0x7FFFFFFF;
@@ -39,12 +74,10 @@ pub async fn read_message(
         MAX_UNAUTH_MESSAGE_SIZE
     };
     if length == 0 || length > max_size {
-        bail!(
-            "Invalid message size: {} (max: {}, authenticated: {})",
-            length,
-            max_size,
-            authenticated
-        );
+        return Err(Error::InvalidMessageSize {
+            size: length,
+            max: max_size,
+        });
     }
 
     // Read the message body
@@ -52,11 +85,11 @@ pub async fn read_message(
     stream
         .read_exact(&mut body)
         .await
-        .context("Failed to read message body")?;
+        .map_err(Error::ReadBody)?;
 
     // Deserialize the XDR message
     let msg = AuthenticatedMessage::from_xdr(&body, stellar_xdr::curr::Limits::none())
-        .context("Failed to deserialize XDR message")?;
+        .map_err(Error::XdrDeserialize)?;
 
     Ok(msg)
 }
@@ -64,13 +97,15 @@ pub async fn read_message(
 /// Write a framed message to the stream.
 ///
 /// Serializes the message to XDR and prepends a 4-byte length header.
-pub async fn write_message(stream: &mut TcpStream, msg: &AuthenticatedMessage) -> Result<()> {
+pub async fn write_message(stream: &mut TcpStream, msg: &AuthenticatedMessage) -> Result<(), Error> {
     // Serialize to XDR
-    let body = msg.to_xdr(stellar_xdr::curr::Limits::none())?;
+    let body = msg
+        .to_xdr(stellar_xdr::curr::Limits::none())
+        .map_err(Error::XdrSerialize)?;
 
     // Validate length
     if body.len() > MAX_MESSAGE_SIZE {
-        bail!("Message too large: {} bytes", body.len());
+        return Err(Error::MessageTooLarge { size: body.len() });
     }
 
     // Create length header (MSB continuation bit = 0)
@@ -81,11 +116,11 @@ pub async fn write_message(stream: &mut TcpStream, msg: &AuthenticatedMessage) -
     stream
         .write_all(&header)
         .await
-        .context("Failed to write message header")?;
+        .map_err(Error::WriteHeader)?;
     stream
         .write_all(&body)
         .await
-        .context("Failed to write message body")?;
+        .map_err(Error::WriteBody)?;
 
     Ok(())
 }
