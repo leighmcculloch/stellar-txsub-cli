@@ -2,7 +2,7 @@
 
 Get peer information from the Stellar network via the peer-to-peer overlay protocol.
 
-Connects directly to stellar-core nodes, discovers peers recursively, and outputs peer information.
+Connects directly to stellar-core nodes, discovers peers recursively, and outputs peer information or a network graph.
 
 ## Example
 
@@ -14,7 +14,9 @@ Connecting to 34.123.45.67:11625 (depth 0)...
 {"type":"info","peer_id":"c3d4...","peer_address":"34.123.45.67:11625","version":"v21.0.0","overlay_version":35,"ledger_version":21}
 ```
 
-## Output Format
+## Output Formats
+
+### JSON (default)
 
 NDJSON (newline-delimited JSON) to stdout, with one JSON object per peer:
 
@@ -23,10 +25,17 @@ NDJSON (newline-delimited JSON) to stdout, with one JSON object per peer:
 {"type":"error","peer_address":"5.6.7.8:11625","error":"Connection timeout"}
 ```
 
-This format allows:
-- Real-time visibility into progress
-- Piping to `jq` or other JSON tools as responses arrive
-- No memory accumulation for large peer lists
+### Mermaid
+
+MermaidJS graph diagram showing network topology:
+
+```
+$ stellar-peerinfo --network testnet --depth 1 --output mermaid
+graph LR
+    N0["core-testnet1.stellar.org:11625\na1b2c3d4\nv21.0.0"]
+    N1["34.123.45.67:11625\ne5f6g7h8\nv21.0.0"]
+    N0 --> N1
+```
 
 ## Install
 
@@ -53,7 +62,8 @@ Connects to a Stellar Core node, discovers peers, and collects information from 
 | `--peer` | `-p` | (per network) | Initial peer address (host:port) |
 | `--timeout` | `-t` | `10` | Timeout in seconds for responses |
 | `--concurrency` | `-j` | `10` | Maximum concurrent peer connections |
-| `--depth` | `-d` | `1` | Recursion depth (0 = unlimited, 1 = just initial peer's list) |
+| `--depth` | `-d` | `0` | Recursion depth (0 = no recursion) |
+| `--output` | `-o` | `json` | Output format: `json` or `mermaid` |
 
 ### Network Short Names
 
@@ -78,9 +88,14 @@ Get peer info from testnet:
 stellar-peerinfo --network testnet
 ```
 
-Recursively explore all reachable peers (unlimited depth):
+Recursively explore peers (2 levels deep):
 ```
-stellar-peerinfo --network testnet --depth 0
+stellar-peerinfo --network testnet --depth 2
+```
+
+Generate a network graph:
+```
+stellar-peerinfo --network testnet --depth 1 --output mermaid > graph.md
 ```
 
 Get peer info from mainnet with high concurrency:

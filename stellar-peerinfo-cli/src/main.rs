@@ -1,15 +1,15 @@
 //! stellar-peerinfo - Get peer information from the Stellar overlay network.
 //!
 //! This CLI tool connects to Stellar Core nodes, discovers peers recursively,
-//! and outputs peer information.
+//! and outputs peer information or a network graph.
 
 mod network;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use network::Network;
 use serde::Serialize;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,9 +44,21 @@ struct Args {
     #[arg(short = 'j', long, default_value = "10")]
     concurrency: usize,
 
-    /// Recursion depth for peer discovery (0 = unlimited, 1 = just initial peer's list)
-    #[arg(short, long, default_value = "1")]
+    /// Recursion depth for peer discovery (0 = no recursion)
+    #[arg(short, long, default_value = "0")]
     depth: usize,
+
+    /// Output format
+    #[arg(short, long, value_enum, default_value = "json")]
+    output: OutputFormat,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum OutputFormat {
+    /// NDJSON output (one JSON object per line)
+    Json,
+    /// MermaidJS graph diagram
+    Mermaid,
 }
 
 /// JSON output for peer info.
@@ -84,6 +96,73 @@ struct PeerInfo {
     ledger_version: u32,
 }
 
+/// Network graph for mermaid output.
+struct PeerGraph {
+    /// Map from address to peer info (if successfully connected)
+    nodes: HashMap<String, Option<PeerInfo>>,
+    /// Edges: source address -> list of known peer addresses
+    edges: HashMap<String, Vec<String>>,
+}
+
+impl PeerGraph {
+    fn new() -> Self {
+        Self {
+            nodes: HashMap::new(),
+            edges: HashMap::new(),
+        }
+    }
+
+    fn add_node(&mut self, address: String, info: Option<PeerInfo>) {
+        self.nodes.insert(address, info);
+    }
+
+    fn add_edges(&mut self, from: String, to: Vec<String>) {
+        self.edges.insert(from, to);
+    }
+
+    fn to_mermaid(&self) -> String {
+        let mut output = String::new();
+        output.push_str("graph LR\n");
+
+        // Create node definitions with short IDs
+        let mut addr_to_id: HashMap<&str, String> = HashMap::new();
+        for (i, addr) in self.nodes.keys().enumerate() {
+            let id = format!("N{}", i);
+            addr_to_id.insert(addr.as_str(), id);
+        }
+
+        // Add node labels
+        for (addr, info) in &self.nodes {
+            let id = addr_to_id.get(addr.as_str()).unwrap();
+            let label = if let Some(info) = info {
+                // Use short peer ID (first 8 chars)
+                let short_id = if info.peer_id.len() > 8 {
+                    &info.peer_id[..8]
+                } else {
+                    &info.peer_id
+                };
+                format!("{}[\"{}\\n{}\\n{}\"]", id, addr, short_id, info.version)
+            } else {
+                format!("{}[\"{}\\n(unreachable)\"]", id, addr)
+            };
+            output.push_str(&format!("    {}\n", label));
+        }
+
+        // Add edges
+        for (from, tos) in &self.edges {
+            if let Some(from_id) = addr_to_id.get(from.as_str()) {
+                for to in tos {
+                    if let Some(to_id) = addr_to_id.get(to.as_str()) {
+                        output.push_str(&format!("    {} --> {}\n", from_id, to_id));
+                    }
+                }
+            }
+        }
+
+        output
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Set up tracing subscriber for stderr
@@ -107,16 +186,23 @@ async fn main() -> Result<()> {
     let timeout_duration = Duration::from_secs(args.timeout);
     let semaphore = Arc::new(Semaphore::new(args.concurrency));
 
-    // Track visited addresses
+    // Track visited addresses and the graph
     let visited = Arc::new(Mutex::new(HashSet::<String>::new()));
+    let graph = Arc::new(Mutex::new(PeerGraph::new()));
 
     // Channel for streaming JSON output
     let (tx, mut rx) = mpsc::unbounded_channel::<PeerOutput>();
 
-    // Spawn output handler
+    // Spawn output handler for JSON mode
+    let output_format = args.output;
     let output_handle = tokio::spawn(async move {
-        while let Some(output) = rx.recv().await {
-            println!("{}", serde_json::to_string(&output).unwrap());
+        if matches!(output_format, OutputFormat::Json) {
+            while let Some(output) = rx.recv().await {
+                println!("{}", serde_json::to_string(&output).unwrap());
+            }
+        } else {
+            // Drain the channel but don't print (mermaid prints at end)
+            while rx.recv().await.is_some() {}
         }
     });
 
@@ -158,6 +244,7 @@ async fn main() -> Result<()> {
             let sem = semaphore.clone();
             let net_id = net_id.clone();
             let tx = tx.clone();
+            let graph = graph.clone();
             let queue = queue.clone();
             let visited = visited.clone();
 
@@ -167,6 +254,15 @@ async fn main() -> Result<()> {
                 eprintln!("Connecting to {} (depth {})...", addr, depth);
 
                 let result = get_peer_with_peers(&addr, &net_id, timeout_duration).await;
+
+                // Update graph
+                {
+                    let mut g = graph.lock().await;
+                    g.add_node(addr.clone(), result.info.clone());
+                    if !result.known_peers.is_empty() {
+                        g.add_edges(addr.clone(), result.known_peers.clone());
+                    }
+                }
 
                 // Send JSON output
                 let output = if let Some(ref info) = result.info {
@@ -193,8 +289,7 @@ async fn main() -> Result<()> {
                 let _ = tx.send(output);
 
                 // Add newly discovered peers to queue if within depth limit
-                // depth 0 means unlimited, otherwise stop when depth >= max_depth
-                if max_depth == 0 || depth + 1 < max_depth {
+                if depth < max_depth {
                     let mut v = visited.lock().await;
                     let mut q = queue.lock().await;
                     for peer_addr in result.known_peers {
@@ -220,6 +315,12 @@ async fn main() -> Result<()> {
 
     // Wait for output handler
     output_handle.await?;
+
+    // Print mermaid output if requested
+    if matches!(args.output, OutputFormat::Mermaid) {
+        let g = graph.lock().await;
+        println!("{}", g.to_mermaid());
+    }
 
     Ok(())
 }
