@@ -6,6 +6,7 @@
 mod crypto;
 mod framing;
 mod handshake;
+mod network;
 mod session;
 
 use anyhow::{bail, Context, Result};
@@ -16,7 +17,7 @@ use stellar_xdr::curr::{ReadXdr, StellarMessage, TransactionEnvelope};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-use crate::crypto::{network_id, LOCAL_PASSPHRASE, MAINNET_PASSPHRASE, TESTNET_PASSPHRASE};
+use crate::network::Network;
 use crate::handshake::handshake;
 
 /// Submit transactions to the Stellar overlay network.
@@ -72,23 +73,9 @@ async fn main() -> Result<()> {
         TransactionEnvelope::from_xdr(&tx_bytes, stellar_xdr::curr::Limits::none())
             .context("Failed to parse transaction envelope")?;
 
-    // Resolve network passphrase and default peer
-    let network_lower = args.network.to_lowercase();
-    let (passphrase, default_peer) = match network_lower.as_str() {
-        "testnet" | "test" => (TESTNET_PASSPHRASE, "core-testnet1.stellar.org:11625"),
-        "mainnet" | "main" | "pubnet" | "public" => {
-            (MAINNET_PASSPHRASE, "core-live-a.stellar.org:11625")
-        }
-        "local" => (LOCAL_PASSPHRASE, "localhost:11625"),
-        _ => (&*args.network, "localhost:11625"),
-    };
-
-    // Use specified peer or default for the network
-    let peer = if args.peer.is_some() {
-        args.peer.as_ref().unwrap()
-    } else {
-        default_peer
-    };
+    // Resolve network
+    let network = Network::from_str(&args.network);
+    let peer = args.peer.as_deref().unwrap_or(network.default_peer());
 
     // Connect to peer
     eprintln!("ℹ️ Connecting to {}", peer);
@@ -97,11 +84,9 @@ async fn main() -> Result<()> {
         .context("Failed to connect to peer")?;
     eprintln!("✅ Connected");
 
-    // Compute network ID
-    let net_id = network_id(passphrase);
-
     // Perform handshake
     eprintln!("ℹ️ Performing handshake");
+    let net_id = network.id();
     let mut session = handshake(stream, net_id.clone(), LOCAL_LISTENING_PORT).await?;
     eprintln!("✅ Authenticated");
 
@@ -154,64 +139,23 @@ fn format_message(msg: &StellarMessage) -> String {
     match msg {
         StellarMessage::ErrorMsg(e) => {
             format!(
-                "ERROR_MSG: {:?} - {}",
+                "{}: {:?} - {}",
+                msg.name(),
                 e.code,
                 String::from_utf8_lossy(&e.msg.to_vec())
             )
         }
-        StellarMessage::Hello(h) => {
-            format!(
-                "HELLO: ledger_version={}, overlay_version={}, version_str={}",
-                h.ledger_version,
-                h.overlay_version,
-                String::from_utf8_lossy(&h.version_str.to_vec())
-            )
-        }
-        StellarMessage::Auth(a) => {
-            format!("AUTH: flags={}", a.flags)
-        }
-        StellarMessage::SendMore(s) => {
-            format!("SEND_MORE: num_messages={}", s.num_messages)
-        }
+        StellarMessage::Auth(a) => format!("{}: flags={}", msg.name(), a.flags),
+        StellarMessage::SendMore(s) => format!("{}: num_messages={}", msg.name(), s.num_messages),
         StellarMessage::SendMoreExtended(s) => {
             format!(
-                "SEND_MORE_EXTENDED: num_messages={}, num_bytes={}",
-                s.num_messages, s.num_bytes
+                "{}: num_messages={}, num_bytes={}",
+                msg.name(),
+                s.num_messages,
+                s.num_bytes
             )
         }
-        StellarMessage::Transaction(_) => "TRANSACTION".to_string(),
-        StellarMessage::DontHave(dh) => {
-            format!("DONT_HAVE: type={:?}", dh.type_)
-        }
-        StellarMessage::Peers(peers) => {
-            format!("PEERS: count={}", peers.len())
-        }
-        StellarMessage::GetTxSet(_) => "GET_TX_SET".to_string(),
-        StellarMessage::TxSet(_) => "TX_SET".to_string(),
-        StellarMessage::GeneralizedTxSet(_) => "GENERALIZED_TX_SET".to_string(),
-        StellarMessage::GetScpQuorumset(_) => "GET_SCP_QUORUMSET".to_string(),
-        StellarMessage::ScpQuorumset(qs) => {
-            format!("SCP_QUORUMSET: threshold={}", qs.threshold)
-        }
-        StellarMessage::ScpMessage(scp) => {
-            format!("SCP_MESSAGE: slot={}", scp.statement.slot_index)
-        }
-        StellarMessage::GetScpState(ledger) => {
-            format!("GET_SCP_STATE: ledger={}", ledger)
-        }
-        StellarMessage::FloodAdvert(advert) => {
-            format!("FLOOD_ADVERT: tx_hashes={}", advert.tx_hashes.len())
-        }
-        StellarMessage::FloodDemand(demand) => {
-            format!("FLOOD_DEMAND: tx_hashes={}", demand.tx_hashes.len())
-        }
-        StellarMessage::TimeSlicedSurveyRequest(_) => "TIME_SLICED_SURVEY_REQUEST".to_string(),
-        StellarMessage::TimeSlicedSurveyResponse(_) => "TIME_SLICED_SURVEY_RESPONSE".to_string(),
-        StellarMessage::TimeSlicedSurveyStartCollecting(_) => {
-            "TIME_SLICED_SURVEY_START_COLLECTING".to_string()
-        }
-        StellarMessage::TimeSlicedSurveyStopCollecting(_) => {
-            "TIME_SLICED_SURVEY_STOP_COLLECTING".to_string()
-        }
+        StellarMessage::Peers(peers) => format!("{}: count={}", msg.name(), peers.len()),
+        _ => msg.name().to_string(),
     }
 }

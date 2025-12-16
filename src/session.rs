@@ -45,7 +45,7 @@ impl PeerSession {
     }
 
     /// Wrap a StellarMessage in an AuthenticatedMessage with proper sequence and MAC.
-    pub fn wrap_authenticated(&mut self, msg: StellarMessage) -> AuthenticatedMessage {
+    fn wrap_authenticated(&mut self, msg: StellarMessage) -> AuthenticatedMessage {
         let sequence = self.send_sequence;
         self.send_sequence += 1;
 
@@ -64,7 +64,7 @@ impl PeerSession {
     }
 
     /// Send an authenticated message to the peer.
-    pub async fn send(&mut self, msg: AuthenticatedMessage) -> Result<()> {
+    async fn send(&mut self, msg: AuthenticatedMessage) -> Result<()> {
         write_message(&mut self.stream, &msg).await
     }
 

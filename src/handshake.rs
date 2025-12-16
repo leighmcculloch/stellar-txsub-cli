@@ -30,6 +30,9 @@ const AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED: i32 = 200;
 /// Auth certificate expiration (1 hour).
 const AUTH_CERT_EXPIRATION_SECONDS: u64 = 3600;
 
+/// Version string for HELLO message.
+const VERSION_STR: &str = concat!("stellar-txsub ", env!("CARGO_PKG_VERSION"));
+
 /// Perform the peer handshake and return an authenticated session.
 pub async fn handshake(
     mut stream: TcpStream,
@@ -57,7 +60,7 @@ pub async fn handshake(
         overlay_version: OVERLAY_PROTOCOL_VERSION,
         overlay_min_version: OVERLAY_PROTOCOL_MIN_VERSION,
         network_id: network_id.clone(),
-        version_str: "stellar-txsub/0.1.0".to_string().try_into().unwrap(),
+        version_str: VERSION_STR.to_string().try_into().unwrap(),
         listening_port,
         peer_id: NodeId(node_identity.to_public_key()),
         cert: auth_cert,
@@ -67,8 +70,8 @@ pub async fn handshake(
     // Send HELLO
     let hello_msg = StellarMessage::Hello(hello);
     eprintln!(
-        "➡️ HELLO: ledger_version={}, overlay_version={}, version_str=stellar-txsub/0.1.0",
-        LEDGER_PROTOCOL_VERSION, OVERLAY_PROTOCOL_VERSION
+        "➡️ HELLO: ledger_version={}, overlay_version={}, version_str={}",
+        LEDGER_PROTOCOL_VERSION, OVERLAY_PROTOCOL_VERSION, VERSION_STR
     );
     send_unauthenticated(&mut stream, hello_msg).await?;
 
@@ -97,7 +100,7 @@ pub async fn handshake(
             );
         }
         other => {
-            bail!("Expected HELLO, got {:?}", other);
+            bail!("Expected HELLO, got {}", other.name());
         }
     };
 

@@ -207,7 +207,7 @@ fn hkdf_expand(key: &HmacSha256Key, info: &[u8]) -> HmacSha256Key {
 }
 
 /// Compute HMAC-SHA256.
-pub fn hmac_sha256(key: &HmacSha256Key, data: &[u8]) -> HmacSha256Mac {
+pub(crate) fn hmac_sha256(key: &HmacSha256Key, data: &[u8]) -> HmacSha256Mac {
     let mut mac = Hmac::<Sha256>::new_from_slice(&key.key).expect("HMAC key should be valid");
     mac.update(data);
     let result = mac.finalize();
@@ -229,22 +229,13 @@ pub fn network_id(passphrase: &str) -> Hash {
     Hash(sha256(passphrase.as_bytes()))
 }
 
-/// Testnet network passphrase.
-pub const TESTNET_PASSPHRASE: &str = "Test SDF Network ; September 2015";
-
-/// Mainnet (public) network passphrase.
-pub const MAINNET_PASSPHRASE: &str = "Public Global Stellar Network ; September 2015";
-
-/// Local network passphrase (stellar/quickstart).
-pub const LOCAL_PASSPHRASE: &str = "Standalone Network ; February 2017";
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_network_id() {
-        let id = network_id(TESTNET_PASSPHRASE);
+        let id = network_id("Test SDF Network ; September 2015");
         // Known testnet network ID
         assert_eq!(id.0.len(), 32);
     }
