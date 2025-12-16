@@ -92,7 +92,7 @@ async fn main() -> Result<()> {
 
     // Send transaction
     let tx_hash = tx_envelope.hash(net_id.0).expect("Failed to hash transaction");
-    eprintln!("➡️ TRANSACTION: hash={}", hex::encode(tx_hash));
+    eprintln!("➡️ Transaction: hash={}", hex::encode(tx_hash));
     let tx_msg = StellarMessage::Transaction(tx_envelope);
     session.send_message(tx_msg).await?;
 

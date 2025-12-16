@@ -70,7 +70,7 @@ pub async fn handshake(
     // Send HELLO
     let hello_msg = StellarMessage::Hello(hello);
     eprintln!(
-        "➡️ HELLO: ledger_version={}, overlay_version={}, version_str={}",
+        "➡️ Hello: ledger_version={}, overlay_version={}, version_str={}",
         LEDGER_PROTOCOL_VERSION, OVERLAY_PROTOCOL_VERSION, VERSION_STR
     );
     send_unauthenticated(&mut stream, hello_msg).await?;
@@ -80,7 +80,7 @@ pub async fn handshake(
     let peer_hello = match peer_hello {
         StellarMessage::Hello(h) => {
             eprintln!(
-                "⬅️ HELLO: ledger_version={}, overlay_version={}, version_str={}",
+                "⬅️ Hello: ledger_version={}, overlay_version={}, version_str={}",
                 h.ledger_version,
                 h.overlay_version,
                 String::from_utf8_lossy(&h.version_str.to_vec())
@@ -89,7 +89,7 @@ pub async fn handshake(
         }
         StellarMessage::ErrorMsg(e) => {
             eprintln!(
-                "❌ ERROR_MSG: {:?} - {}",
+                "❌ ErrorMsg: {:?} - {}",
                 e.code,
                 String::from_utf8_lossy(&e.msg.to_vec())
             );
@@ -139,19 +139,19 @@ pub async fn handshake(
         flags: AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED,
     };
     let auth_msg = StellarMessage::Auth(auth);
-    eprintln!("➡️ AUTH: flags={}", AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED);
+    eprintln!("➡️ Auth: flags={}", AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED);
     session.send_message(auth_msg).await?;
 
     // Receive response (could be AUTH, SEND_MORE_EXTENDED, or ERROR)
     let response = session.recv().await?;
     match response {
         StellarMessage::Auth(a) => {
-            eprintln!("⬅️ AUTH: flags={}", a.flags);
+            eprintln!("⬅️ Auth: flags={}", a.flags);
             Ok(session)
         }
         StellarMessage::SendMoreExtended(s) => {
             eprintln!(
-                "⬅️ SEND_MORE_EXTENDED: num_messages={}, num_bytes={}",
+                "⬅️ SendMoreExtended: num_messages={}, num_bytes={}",
                 s.num_messages, s.num_bytes
             );
             // Peer sent SEND_MORE_EXTENDED before AUTH, which is valid
@@ -159,12 +159,12 @@ pub async fn handshake(
             let auth_response = session.recv().await?;
             match auth_response {
                 StellarMessage::Auth(a) => {
-                    eprintln!("⬅️ AUTH: flags={}", a.flags);
+                    eprintln!("⬅️ Auth: flags={}", a.flags);
                     Ok(session)
                 }
                 StellarMessage::ErrorMsg(e) => {
                     eprintln!(
-                        "❌ ERROR_MSG: {:?} - {}",
+                        "❌ ErrorMsg: {:?} - {}",
                         e.code,
                         String::from_utf8_lossy(&e.msg.to_vec())
                     );
@@ -184,7 +184,7 @@ pub async fn handshake(
         }
         StellarMessage::ErrorMsg(e) => {
             eprintln!(
-                "❌ ERROR_MSG: {:?} - {}",
+                "❌ ErrorMsg: {:?} - {}",
                 e.code,
                 String::from_utf8_lossy(&e.msg.to_vec())
             );
