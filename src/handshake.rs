@@ -22,7 +22,7 @@ const OVERLAY_PROTOCOL_VERSION: u32 = 38;
 const OVERLAY_PROTOCOL_MIN_VERSION: u32 = 35;
 
 /// Current ledger protocol version.
-const LEDGER_PROTOCOL_VERSION: u32 = 22;
+const LEDGER_PROTOCOL_VERSION: u32 = 25;
 
 /// Auth message flag indicating flow control in bytes is requested.
 const AUTH_MSG_FLAG_FLOW_CONTROL_BYTES_REQUESTED: i32 = 200;
@@ -53,7 +53,7 @@ pub async fn handshake(
 
     // Build HELLO message
     let hello = Hello {
-        ledger_version: 22, // Current ledger protocol version
+        ledger_version: LEDGER_PROTOCOL_VERSION,
         overlay_version: OVERLAY_PROTOCOL_VERSION,
         overlay_min_version: OVERLAY_PROTOCOL_MIN_VERSION,
         network_id: network_id.clone(),
@@ -68,7 +68,7 @@ pub async fn handshake(
     let hello_msg = StellarMessage::Hello(hello);
     eprintln!(
         "➡️ HELLO: ledger_version={}, overlay_version={}, version_str=stellar-txsub/0.1.0",
-        22, OVERLAY_PROTOCOL_VERSION
+        LEDGER_PROTOCOL_VERSION, OVERLAY_PROTOCOL_VERSION
     );
     send_unauthenticated(&mut stream, hello_msg).await?;
 
