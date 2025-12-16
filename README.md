@@ -10,9 +10,18 @@ A Rust library for connecting to and communicating with Stellar Core nodes via t
 
 ### Features
 
-- Connect to Stellar Core nodes
+- Connect to stellar-core nodes
 - Perform authenticated handshakes
 - Send and receive protocol messages (transactions, SCP messages, surveys, etc.)
+
+### Installation
+
+This crate is not published to crates.io. Add it to your `Cargo.toml` via git:
+
+```toml
+[dependencies]
+stellar-overlay = { git = "https://github.com/leighmcculloch/stellar-overlay", branch = "main" }
+```
 
 ### Example
 
@@ -57,6 +66,17 @@ This repository includes two CLI tools built on top of the stellar-overlay libra
 
 Submit transactions to the Stellar network via the peer-to-peer overlay protocol.
 
+Install with:
+
+```
+cargo install --locked \
+  --git https://github.com/leighmcculloch/stellar-txsub-cli \
+  --package stellar-txsub-cli \
+  --branch main
+```
+
+Run like:
+
 ```
 echo "AAAAAgAAAA..." | stellar-txsub --network testnet
 ```
@@ -65,24 +85,19 @@ echo "AAAAAgAAAA..." | stellar-txsub --network testnet
 
 Get peer information from the Stellar network.
 
-```
-stellar-peerinfo --network testnet
-```
-
-## Install CLI Tools
+Install with:
 
 ```
-# Install stellar-txsub
-cargo install --locked \
-  --git https://github.com/leighmcculloch/stellar-txsub-cli \
-  --package stellar-txsub-cli \
-  --branch main
-
-# Install stellar-peerinfo
 cargo install --locked \
   --git https://github.com/leighmcculloch/stellar-txsub-cli \
   --package stellar-peerinfo-cli \
   --branch main
+```
+
+Run like:
+
+```
+stellar-peerinfo --network testnet
 ```
 
 ## Networks
