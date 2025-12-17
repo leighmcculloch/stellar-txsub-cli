@@ -15,9 +15,9 @@ use std::time::Duration;
 use stellar_overlay::connect;
 use stellar_strkey::ed25519::PublicKey as StrkeyPublicKey;
 use stellar_xdr::curr::{
-    DontHave, GeneralizedTransactionSet, Hash, Limits, MessageType, PublicKey, ReadXdr,
-    ScpStatementPledges, SendMoreExtended, StellarMessage, StellarValue, TransactionEnvelope,
-    TransactionPhase, TxSetComponent, WriteXdr,
+    GeneralizedTransactionSet, Hash, Limits, PublicKey, ReadXdr, ScpStatementPledges,
+    SendMoreExtended, StellarMessage, StellarValue, TransactionEnvelope, TransactionPhase,
+    TxSetComponent, WriteXdr,
 };
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -182,20 +182,8 @@ async fn main() -> Result<()> {
                         }
                     }
 
-                    // Respond to peer requests with DontHave (we're a lightweight client)
-                    StellarMessage::GetScpState(_) => {
-                        // We don't have SCP state to share - just ignore
-                        // (responding here might cause issues as peer expects specific format)
-                    }
-                    StellarMessage::GetScpQuorumset(hash) => {
-                        // Respond with DontHave
-                        eprintln!("➡️ DontHave: ScpQuorumset");
-                        let dont_have = StellarMessage::DontHave(DontHave {
-                            type_: MessageType::ScpQuorumset,
-                            req_hash: hash.clone(),
-                        });
-                        let _ = session.send_message(dont_have).await;
-                    }
+                    // Ignore peer requests (we're a lightweight client)
+                    StellarMessage::GetScpState(_) | StellarMessage::GetScpQuorumset(_) => {}
 
                     // Replenish flow control when peer sends us flow control messages
                     StellarMessage::SendMore(_) | StellarMessage::SendMoreExtended(_) => {
